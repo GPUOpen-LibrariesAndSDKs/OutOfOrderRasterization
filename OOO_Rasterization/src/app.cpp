@@ -25,7 +25,7 @@
 #include "misc/memory_allocator.h"
 #include "misc/object_tracker.h"
 #include "misc/time.h"
-#include "misc/window.h"
+#include "misc/window_factory.h"
 #include "wrappers/buffer.h"
 #include "wrappers/command_buffer.h"
 #include "wrappers/command_pool.h"
@@ -52,7 +52,6 @@
 
 
 #define MAX_DEPTH          (40)
-#define N_SWAPCHAIN_IMAGES (3)
 
 
 // Target:
@@ -161,6 +160,10 @@ App::App()
      m_ooo_enabled_pipeline_id (-1),
     m_should_rotate            (true)
 {
+    memset(m_frame_drawn_status,
+           0,
+           sizeof(m_frame_drawn_status) );
+
     m_properties_data_set = false;
 
     m_teapot_props_data_ptr.reset(new float[N_TEAPOTS * sizeof(float) * 8 /* pos + rot */]);
@@ -237,7 +240,7 @@ void App::draw_frame(void* app_raw_ptr)
     /* if at least m_n_swapchain_images frames have been drawn, then given the fact we use FIFO presentation mode,
      * we should be safe to extract the timestamps written when rendering the last swapchain image at index n_swapchain_image.
      */
-    if (app_ptr->m_n_frames_drawn >= app_ptr->m_n_swapchain_images)
+    if (app_ptr->m_frame_drawn_status[n_swapchain_image])
     {
         uint64_t timestamps[2]; /* top of pipe, bottom of pipe */
 
@@ -285,6 +288,8 @@ void App::draw_frame(void* app_raw_ptr)
                                curr_frame_signal_semaphore_ptr);
 
     ++app_ptr->m_n_frames_drawn;
+
+    app_ptr->m_frame_drawn_status[n_swapchain_image] = true;
 }
 
 void App::init()
@@ -307,11 +312,14 @@ void App::init()
 
 void App::init_buffers()
 {
-    Anvil::MemoryAllocator allocator(m_device_ptr.get(),
-                                     true,   /* mappable_memory_required */
-                                     false); /* coherent_memory_required */
-    TeapotData             data     (U_GRANULARITY,
-                                     V_GRANULARITY);
+    Anvil::MemoryAllocator allocator_mappable   (m_device_ptr.get(),
+                                                 true,   /* mappable_memory_required */
+                                                 false); /* coherent_memory_required */
+    Anvil::MemoryAllocator allocator_nonmappable(m_device_ptr.get(),
+                                                 false,  /* mappable_memory_required */
+                                                 false); /* coherent_memory_required */
+    TeapotData             data                 (U_GRANULARITY,
+                                                 V_GRANULARITY);
 
     const VkDeviceSize     index_data_size      = data.get_index_data_size();
     const VkDeviceSize     properties_data_size = N_TEAPOTS * sizeof(float) * 8; /* rot_xyzX + pos_xyzX */
@@ -339,9 +347,9 @@ void App::init_buffers()
                                                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
                              Anvil::BufferDeleter() );
 
-    allocator.add_buffer(m_index_buffer_ptr.get() );
-    allocator.add_buffer(m_query_results_buffer_ptr.get() );
-    allocator.add_buffer(m_vertex_buffer_ptr.get() );
+    allocator_nonmappable.add_buffer(m_index_buffer_ptr.get() );
+    allocator_mappable.add_buffer   (m_query_results_buffer_ptr.get() );
+    allocator_nonmappable.add_buffer(m_vertex_buffer_ptr.get() );
 
     for (uint32_t n_swapchain_image = 0;
                   n_swapchain_image < m_n_swapchain_images;
@@ -356,11 +364,12 @@ void App::init_buffers()
                                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
                              Anvil::BufferDeleter() );
 
-        allocator.add_buffer              (new_buffer_ptr.get() );
+        allocator_nonmappable.add_buffer  (new_buffer_ptr.get() );
         m_properties_buffer_ptrs.push_back(new_buffer_ptr);
     }
 
-    allocator.bake();
+    allocator_mappable.bake();
+    allocator_nonmappable.bake();
 
     m_index_buffer_ptr->write (0, /* start_offset */
                                index_data_size,
@@ -429,6 +438,13 @@ void App::init_command_buffers()
             std::shared_ptr<Anvil::Framebuffer>          framebuffer_ptr(m_framebuffers[n_render_cmdbuffer]);
             std::shared_ptr<Anvil::RenderPass>           renderpass_ptr (m_renderpasses[n_render_cmdbuffer]);
 
+            const Anvil::BufferBarrier query_result_barrier(VK_ACCESS_TRANSFER_WRITE_BIT,
+                                                            VK_ACCESS_HOST_READ_BIT,
+                                                            m_device_ptr->get_queue_family_index(Anvil::QUEUE_FAMILY_TYPE_UNIVERSAL),
+                                                            m_device_ptr->get_queue_family_index(Anvil::QUEUE_FAMILY_TYPE_UNIVERSAL),
+                                                            m_query_results_buffer_ptr.get(),
+                                                            sizeof(uint64_t) * n_render_cmdbuffer * 2,
+                                                            sizeof(uint64_t) * 2);
             const Anvil::BufferBarrier props_buffer_barrier(VK_ACCESS_HOST_WRITE_BIT,
                                                             VK_ACCESS_SHADER_READ_BIT,
                                                             m_device_ptr->get_queue_family_index(Anvil::QUEUE_FAMILY_TYPE_UNIVERSAL),
@@ -505,6 +521,16 @@ void App::init_command_buffers()
                                                               sizeof(uint64_t) * n_render_cmdbuffer * 2,
                                                               sizeof(uint64_t),
                                                               VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+
+                cmdbuffer_ptr->record_pipeline_barrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                                       VK_PIPELINE_STAGE_HOST_BIT,
+                                                       VK_FALSE, /* in_by_region                   */
+                                                       0,        /* in_memory_barrier_count        */
+                                                       nullptr,  /* in_memory_barriers_ptr         */
+                                                       1,        /* in_buffer_memory_barrier_count */
+                                                       &query_result_barrier,
+                                                       0,        /* in_image_memory_barrier_count */
+                                                       nullptr); /* in_image_memory_barriers_ptr  */
             }
             cmdbuffer_ptr->stop_recording();
 
@@ -763,10 +789,12 @@ void App::init_semaphores()
 
 void App::init_shaders()
 {
-    Anvil::GLSLShaderToSPIRVGenerator fs(Anvil::GLSLShaderToSPIRVGenerator::MODE_USE_SPECIFIED_SOURCE,
+    Anvil::GLSLShaderToSPIRVGenerator fs(m_physical_device_ptr,
+                                         Anvil::GLSLShaderToSPIRVGenerator::MODE_USE_SPECIFIED_SOURCE,
                                          fs_body,
                                          Anvil::SHADER_STAGE_FRAGMENT);
-    Anvil::GLSLShaderToSPIRVGenerator vs(Anvil::GLSLShaderToSPIRVGenerator::MODE_USE_SPECIFIED_SOURCE,
+    Anvil::GLSLShaderToSPIRVGenerator vs(m_physical_device_ptr,
+                                         Anvil::GLSLShaderToSPIRVGenerator::MODE_USE_SPECIFIED_SOURCE,
                                          vs_body,
                                          Anvil::SHADER_STAGE_VERTEX);
 
@@ -802,6 +830,7 @@ void App::init_swapchain()
                                   Anvil::RenderingSurfaceDeleter() );
 
     m_swapchain_ptr.reset(m_device_ptr->create_swapchain(m_rendering_surface_ptr.get(),
+                                                         m_window_ptr.get(),
                                                          VK_FORMAT_B8G8R8A8_UNORM,
                                                          VK_PRESENT_MODE_FIFO_KHR,
                                                          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -812,11 +841,18 @@ void App::init_swapchain()
 void App::init_window()
 {
     /* Create a window */
-    m_window_ptr.reset(new Anvil::Window("OutOfOrderRasterization example",
-                                         1280,
-                                         720,
-                                         draw_frame,
-                                         this),
+    m_window_ptr.reset(Anvil::WindowFactory::create_window(
+
+#ifdef _WIN32
+                                                           Anvil::WINDOW_PLATFORM_SYSTEM,
+#else
+                                                           Anvil::WINDOW_PLATFORM_XCB,
+#endif
+                                                           "OutOfOrderRasterization example",
+                                                           1280,
+                                                           720,
+                                                           draw_frame,
+                                                           this),
                        Anvil::WindowDeleter() );
 
     /* Sign up for keypress notifications */

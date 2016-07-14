@@ -22,6 +22,8 @@
 
 #include <memory>
 
+#define N_SWAPCHAIN_IMAGES (3)
+
 
 class App
 {
@@ -95,6 +97,7 @@ private:
     std::vector<std::shared_ptr<Anvil::Semaphore> > m_frame_signal_semaphores;
     std::vector<std::shared_ptr<Anvil::Semaphore> > m_frame_wait_semaphores;
 
+    bool                      m_frame_drawn_status[N_SWAPCHAIN_IMAGES];
     Anvil::GraphicsPipelineID m_general_pipeline_id;
     Anvil::GraphicsPipelineID m_ooo_disabled_pipeline_id;
     Anvil::GraphicsPipelineID m_ooo_enabled_pipeline_id;

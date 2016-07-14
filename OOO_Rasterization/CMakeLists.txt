@@ -35,8 +35,8 @@ if (WIN32)
                                 $ENV{VULKAN_SDK}/Bin32)
     endif()
 else()
-    include_directories($ENV{VK_SDK_PATH}/x86_64/include/vulkan
-                        $ENV{VULKAN_SDK}/x86_64/include/vulkan)
+    include_directories($ENV{VK_SDK_PATH}/x86_64/include
+                        $ENV{VULKAN_SDK}/x86_64/include)
     link_directories   ($ENV{VK_SDK_PATH}/x86_64/lib
                         $ENV{VULKAN_SDK}/x86_64/lib)
 endif()
@@ -53,5 +53,5 @@ add_dependencies     (OOO_Rasterization Anvil)
 if (WIN32)
     target_link_libraries(OOO_Rasterization Anvil)
 else()
-    target_link_libraries(OOO_Rasterization Anvil xcb-keysyms)
+    target_link_libraries(OOO_Rasterization Anvil dl)
 endif()
