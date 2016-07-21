@@ -30,6 +30,11 @@
 #define N_PATCH_VERTICES (16)
 
 
+// Teapot patch definitions from "The Origins of the Teapot"
+// Frank Crow, Xerox PARC (from conversations with Martin Newell and Jim Blinn)
+// IEEE Computer Graphics and Applications
+// Volume 7 Issue 1, January 1987
+// Pages 8 - 19
 const uint32_t TeapotData::m_patch_index_data[] =
 {
     1,   2,   3,   4,
@@ -193,6 +198,11 @@ const uint32_t TeapotData::m_patch_index_data[] =
     294, 301, 302, 271,
 };
 
+// Teapot vertices from "The Origins of the Teapot"
+// Frank Crow, Xerox PARC (from conversations with Martin Newell and Jim Blinn)
+// IEEE Computer Graphics and Applications
+// Volume 7 Issue 1, January 1987
+// Pages 8 - 19
 const float TeapotData::m_patch_vertex_data[] =
 {
     1.4f,      0.0f,    2.4f,
