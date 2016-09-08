@@ -69,9 +69,9 @@ private:
                                            void*                      user_arg);
 
     /* Private variables */
-    std::shared_ptr<Anvil::Device>           m_device_ptr;
+    std::weak_ptr<Anvil::Device>             m_device_ptr;
     std::shared_ptr<Anvil::Instance>         m_instance_ptr;
-    Anvil::PhysicalDevice*                   m_physical_device_ptr;
+    std::weak_ptr<Anvil::PhysicalDevice>     m_physical_device_ptr;
     std::shared_ptr<Anvil::QueryPool>        m_query_pool_ptr;
     std::shared_ptr<Anvil::RenderingSurface> m_rendering_surface_ptr;
     std::shared_ptr<Anvil::Swapchain>        m_swapchain_ptr;

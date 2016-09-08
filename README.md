@@ -20,14 +20,14 @@ What platforms and hardware does it work on?
 ------
 Currently, the sample has been confirmed to build and work correctly under:
 - 32- and 64-bit Linux   (Ubuntu)
-- 32- and 64-bit Windows (7, 8, 10)
+- 32- and 64-bit Windows (7, 8.1, 10)
 
 What are the requirements?
 ------
 In order to build the sample, you will need the following software:
 - C++11 compiler.
 - CMake
-- Vulkan SDK
+- Vulkan SDK 1.0.13.0 or newer
 
 To build the sample on Linux, additional packages should be installed:
 - libxcb-keysyms (For ubuntu, use "apt-get install libxcb-keysyms1-dev")
